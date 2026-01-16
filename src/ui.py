@@ -1,19 +1,78 @@
+from tkinter.filedialog import askopenfilename
+from typing import Optional
+
 import customtkinter as ctk
+from PIL.Image import Image
+
+from src.engine import create_band_image
+from src.models import LeatherBand
+
+
+class BadgeRow(ctk.CTkFrame):
+    def __init__(self, master, index: int, on_up, on_down, on_change, on_delete):
+        super().__init__(master)
+        self.badge = None
+        self.index = index
+        self.on_up = on_up
+        self.on_down = on_down
+        self.on_change = on_change
+        self.on_delete = on_delete
+
+        self.grid_columnconfigure(0, weight=1)
+
+        # Badge name/file
+        # name = os.path.basename(badge.filename)
+        name = f"Test Badge {index}"
+        self.label = ctk.CTkLabel(self, text=name, anchor="w")
+        self.label.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+
+        # Buttons
+        self.btn_up = ctk.CTkButton(self, text="↑", width=30, command=self._up)
+        self.btn_up.grid(row=0, column=1, padx=2)
+
+        self.btn_down = ctk.CTkButton(self, text="↓", width=30, command=self._down)
+        self.btn_down.grid(row=0, column=2, padx=2)
+
+        self.btn_change = ctk.CTkButton(
+            self, text="Change", width=60, command=self._change
+        )
+        self.btn_change.grid(row=0, column=3, padx=2)
+
+        self.btn_del = ctk.CTkButton(
+            self,
+            text="X",
+            width=30,
+            fg_color="red",
+            hover_color="darkred",
+            command=self._delete,
+        )
+        self.btn_del.grid(row=0, column=4, padx=5)
+
+    def _up(self):
+        self.on_up(self.index)
+
+    def _down(self):
+        self.on_down(self.index)
+
+    def _change(self):
+        self.on_change(self.index)
+
+    def _delete(self):
+        self.on_delete(self.index)
 
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        self.band = LeatherBand("", 10, [])
+        self.preview_image: Optional[Image] = None
+
         self.title("LeatherBand")
         self.geometry("1000x800")
 
         self.padding = 10
         self.heading_font = ctk.CTkFont(family="Roboto", size=14, weight="bold")
-
-        # Internal State
-        # self.band = LeatherBand(background_path="", margin=10, badges=[])
-        # self.current_preview_image: Image.Image = None
 
         # --- UI Layout ---
         self.grid_columnconfigure(0, weight=0)  # Config panel
@@ -23,8 +82,6 @@ class App(ctk.CTk):
         # Left Panel (Controls)
         self.left_panel = ctk.CTkFrame(self, fg_color="transparent")
         self.left_panel.grid(row=0, column=0, sticky="nsew")
-        # Let the left panel size itself based on its children's requested sizes
-        # (don't enforce a fixed width)
         self.left_panel.grid_rowconfigure(3, weight=1)  # Scrollable area expands
 
         # Presets
@@ -87,7 +144,7 @@ class App(ctk.CTk):
 
         self.lbl_bg = ctk.CTkLabel(
             self.bg_frame,
-            text="Background:",
+            text="Background",
             font=self.heading_font,
             fg_color="gray30",
             corner_radius=6,
@@ -127,7 +184,7 @@ class App(ctk.CTk):
 
         self.lbl_margin = ctk.CTkLabel(
             self.margin_frame,
-            text="Margin:",
+            text="Margin",
             font=self.heading_font,
             fg_color="gray30",
             corner_radius=6,
@@ -227,8 +284,48 @@ class App(ctk.CTk):
         self.lbl_preview = ctk.CTkLabel(self.preview_panel, text="Preview")
         self.lbl_preview.grid(row=0, column=0, padx=5, pady=5)
 
+        for i in range(2):
+            badge_row = BadgeRow(
+                self.badges_list,
+                i,
+                self._on_badge_up,
+                self._on_badge_down,
+                self._on_badge_change,
+                self._on_badge_delete,
+            )
+            badge_row.pack(fill="x")
+
         # Initial Render
         # self.refresh_ui()
+
+    def refresh_badges_list(self):
+        for widget in self.badges_list.winfo_children():
+            widget.destroy()
+        for i in range(2):
+            badge_row = BadgeRow(
+                self.badges_list,
+                i,
+                self._on_badge_up,
+                self._on_badge_down,
+                self._on_badge_change,
+                self._on_badge_delete,
+            )
+            badge_row.pack(fill="x")
+
+    def refresh_preview(self):
+        self.preview_image = create_band_image(self.band)
+        if self.preview_image is None:
+            return
+        ctk_image = ctk.CTkImage(
+            light_image=self.preview_image,
+            dark_image=self.preview_image,
+            size=self.preview_image.size,
+        )
+        self.lbl_preview.configure(image=ctk_image, text="")
+
+    def refresh_ui(self):
+        self.refresh_preview()
+        self.refresh_badges_list()
 
     def load_preset(self):
         # Load preset data from file or database
@@ -239,8 +336,14 @@ class App(ctk.CTk):
         pass
 
     def select_background(self):
-        # Select background image
-        pass
+        path = askopenfilename(
+            title="Select Background", filetypes=[("PNG Files", "*.png")]
+        )
+        if not path:
+            return
+        self.band.image_path = path
+        self.var_bg_path.set(path)
+        self.refresh_preview()
 
     def on_margin_change(self, event):
         # Update margin value when slider is moved
@@ -248,6 +351,22 @@ class App(ctk.CTk):
 
     def add_badge(self):
         # Add a new badge to the list
+        pass
+
+    def _on_badge_change(self, index):
+        # Update badge value when slider is moved
+        pass
+
+    def _on_badge_delete(self, index):
+        # Delete badge from list
+        pass
+
+    def _on_badge_up(self, index):
+        # Move badge up in list
+        pass
+
+    def _on_badge_down(self, index):
+        # Move badge down in list
         pass
 
     def export_image(self):
