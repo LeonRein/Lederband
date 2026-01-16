@@ -1,5 +1,6 @@
 import dataclasses
 import os
+import pathlib
 from dataclasses import dataclass
 from typing import List
 
@@ -14,12 +15,13 @@ class Badge:
 
     @property
     def name(self):
-        return os.path.basename(self.filename)
+        path = pathlib.Path(self.image_path)
+        return path.stem
 
     def get_image(self):
         if not self.image_path or not os.path.exists(self.image_path):
             return None
-        return Image.open(self.background_path).convert("RGBA")
+        return Image.open(self.image_path).convert("RGBA")
 
     image_path: str
 

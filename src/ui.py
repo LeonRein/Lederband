@@ -1,3 +1,4 @@
+import os
 from tkinter.filedialog import askopenfilename
 from typing import Optional
 
@@ -5,13 +6,13 @@ import customtkinter as ctk
 from PIL.Image import Image
 
 from src.engine import create_band_image
-from src.models import LeatherBand
+from src.models import Badge, LeatherBand
 
 
 class BadgeRow(ctk.CTkFrame):
-    def __init__(self, master, index: int, on_up, on_down, on_change, on_delete):
+    def __init__(self, master, badge, index: int, on_up, on_down, on_change, on_delete):
         super().__init__(master)
-        self.badge = None
+        self.badge = badge
         self.index = index
         self.on_up = on_up
         self.on_down = on_down
@@ -21,9 +22,7 @@ class BadgeRow(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         # Badge name/file
-        # name = os.path.basename(badge.filename)
-        name = f"Test Badge {index}"
-        self.label = ctk.CTkLabel(self, text=name, anchor="w")
+        self.label = ctk.CTkLabel(self, text=badge.name, anchor="w")
         self.label.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
         # Buttons
@@ -69,7 +68,7 @@ class App(ctk.CTk):
         self.preview_image: Optional[Image] = None
 
         self.title("LeatherBand")
-        self.geometry("1000x800")
+        self.geometry("600x800")
 
         self.padding = 10
         self.heading_font = ctk.CTkFont(family="Roboto", size=14, weight="bold")
@@ -284,33 +283,20 @@ class App(ctk.CTk):
         self.lbl_preview = ctk.CTkLabel(self.preview_panel, text="Preview")
         self.lbl_preview.grid(row=0, column=0, padx=5, pady=5)
 
-        for i in range(2):
-            badge_row = BadgeRow(
-                self.badges_list,
-                i,
-                self._on_badge_up,
-                self._on_badge_down,
-                self._on_badge_change,
-                self._on_badge_delete,
-            )
-            badge_row.pack(fill="x")
-
-        # Initial Render
-        # self.refresh_ui()
-
     def refresh_badges_list(self):
         for widget in self.badges_list.winfo_children():
             widget.destroy()
-        for i in range(2):
+        for i, badge in enumerate(self.band.badges):
             badge_row = BadgeRow(
                 self.badges_list,
+                badge,
                 i,
                 self._on_badge_up,
                 self._on_badge_down,
                 self._on_badge_change,
                 self._on_badge_delete,
             )
-            badge_row.pack(fill="x")
+            badge_row.pack(fill="x", side="bottom")
 
     def refresh_preview(self):
         self.preview_image = create_band_image(self.band)
@@ -339,35 +325,58 @@ class App(ctk.CTk):
         path = askopenfilename(
             title="Select Background", filetypes=[("PNG Files", "*.png")]
         )
-        if not path:
+        if path is None or not os.path.exists(path):
             return
         self.band.image_path = path
         self.var_bg_path.set(path)
         self.refresh_preview()
 
     def on_margin_change(self, event):
-        # Update margin value when slider is moved
-        pass
+        val = int(event)
+        self.lbl_margin_val.configure(text=f"{val}px")
+        self.band.margin = val
+        self.refresh_preview()
 
     def add_badge(self):
-        # Add a new badge to the list
-        pass
+        path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
+        if path is None or not os.path.exists(path):
+            return
+        self.band.badges.append(Badge(path))
+        self.refresh_badges_list()
+        self.refresh_preview()
 
     def _on_badge_change(self, index):
-        # Update badge value when slider is moved
-        pass
+        path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
+        if path is None or not os.path.exists(path):
+            return
+        self.band.badges[index].image_path = path
+        self.refresh_badges_list()
+        self.refresh_preview()
 
     def _on_badge_delete(self, index):
-        # Delete badge from list
-        pass
+        del self.band.badges[index]
+        self.refresh_badges_list()
+        self.refresh_preview()
 
     def _on_badge_up(self, index):
-        # Move badge up in list
-        pass
+        if index >= len(self.band.badges) - 1:
+            return
+        self.band.badges[index], self.band.badges[index + 1] = (
+            self.band.badges[index + 1],
+            self.band.badges[index],
+        )
+        self.refresh_preview()
+        self.refresh_badges_list()
 
     def _on_badge_down(self, index):
-        # Move badge down in list
-        pass
+        if index <= 0:
+            return
+        self.band.badges[index], self.band.badges[index - 1] = (
+            self.band.badges[index - 1],
+            self.band.badges[index],
+        )
+        self.refresh_preview()
+        self.refresh_badges_list()
 
     def export_image(self):
         # Export the current image
