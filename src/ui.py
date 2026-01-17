@@ -470,19 +470,30 @@ class App(ctk.CTk):
             badge_ui.pack(fill="x", side="bottom", pady=5)
 
     def refresh_preview(self):
+        if (
+            self.band.image_path is None
+            or self.band.image_path == ""
+            or self.band.image_path == ()
+        ):
+            self.preview_image = None
+            self.lbl_preview.configure(image=None, text="No Background image selected")
+            return
         try:
             self.preview_image = create_band_image(self.band)
         except FileNotFoundError as e:
+            self.preview_image = None
+            self.lbl_preview.configure(image=None, text="No Preview")
             CTkMessagebox(title="Error", message=str(e), icon="cancel")
             return
         if self.preview_image is None:
-            return
-        ctk_image = ctk.CTkImage(
-            light_image=self.preview_image,
-            dark_image=self.preview_image,
-            size=self.preview_image.size,
-        )
-        self.lbl_preview.configure(image=ctk_image, text="")
+            self.lbl_preview.configure(image=None, text="No Preview")
+        else:
+            ctk_image = ctk.CTkImage(
+                light_image=self.preview_image,
+                dark_image=self.preview_image,
+                size=self.preview_image.size,
+            )
+            self.lbl_preview.configure(image=ctk_image, text="")
 
     def refresh_elements(self):
         self.var_bg_path.set(self.band.image_path)
@@ -569,7 +580,7 @@ class App(ctk.CTk):
         )
         if path2 is None or not os.path.exists(path2):
             return
-        self.band.badges.append(BadgeRow(path1, path2))
+        self.band.badges.append(BadgeRow.from_paths(path1, path2))
         self.refresh_badges_list()
         self.refresh_preview()
 

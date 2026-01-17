@@ -4,7 +4,7 @@ import pathlib
 from dataclasses import dataclass
 from typing import List
 
-from dataclasses_json import dataclass_json
+from dataclasses_json import config, dataclass_json
 from PIL import Image
 
 
@@ -33,8 +33,22 @@ class BadgeRow:
 
     badges: List[Badge]
 
-    def __init__(self, *args):
-        self.badges = [Badge(arg) for arg in args]
+    @classmethod
+    def from_paths(cls, *args):
+        badges = [Badge(arg) for arg in args]
+        return cls(badges)
+
+
+def union_decoder(data):
+    results = []
+    for item in data:
+        # Try to parse as A first
+        if "badges" in item:
+            results.append(BadgeRow.from_dict(item))
+        # Then try B
+        else:
+            results.append(Badge.from_dict(item))
+    return results
 
 
 @dataclass_json
@@ -44,7 +58,9 @@ class LeatherBand:
 
     image_path: str = ""
     margin: int = 6
-    badges: List[Badge | BadgeRow] = dataclasses.field(default_factory=list)
+    badges: List[Badge | BadgeRow] = dataclasses.field(
+        default_factory=list, metadata=config(decoder=union_decoder)
+    )
 
     def get_image(self):
         if not self.image_path or not os.path.exists(self.image_path):
