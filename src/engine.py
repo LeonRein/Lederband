@@ -37,7 +37,6 @@ def create_badge_row_image(badge_row: BadgeRow):
 def create_band_image(band: LeatherBand) -> Optional[Image.Image]:
     background = band.get_image()
     if background is None:
-        print(f"Warning: Background image not found: {band.image_path}")
         return None
 
     bg_width, bg_height = background.size

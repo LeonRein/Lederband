@@ -1,12 +1,17 @@
 import os
-from tkinter.filedialog import askopenfilename
+import pathlib
+from tkinter.filedialog import askopenfilename, asksaveasfilename
 from typing import Callable, Optional
 
 import customtkinter as ctk
+from CTkMessagebox import CTkMessagebox
 from PIL.Image import Image
 
 from src.engine import create_band_image
 from src.models import Badge, BadgeRow, LeatherBand
+
+DEFAULT_PRESET_PATH = os.path.join(os.getcwd(), "presets/")
+DEFAULT_EXPORT_PATH = os.path.join(os.getcwd(), "output/")
 
 
 class BadgeListElement:
@@ -202,7 +207,7 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.band = LeatherBand("", 10, [])
+        self.band = LeatherBand()
         self.preview_image: Optional[Image] = None
 
         self.title("LeatherBand")
@@ -262,10 +267,10 @@ class App(ctk.CTk):
             padx=(self.padding, self.padding / 2),
             pady=(self.padding / 2, self.padding),
         )
-        self.btn_save = ctk.CTkButton(
-            self.preset_frame, text="Save Preset", command=self.save_preset
+        self.btn_new = ctk.CTkButton(
+            self.preset_frame, text="New Preset", command=self.new_preset
         )
-        self.btn_save.grid(
+        self.btn_new.grid(
             row=2,
             column=1,
             padx=(self.padding / 2, self.padding),
@@ -465,7 +470,11 @@ class App(ctk.CTk):
             badge_ui.pack(fill="x", side="bottom", pady=5)
 
     def refresh_preview(self):
-        self.preview_image = create_band_image(self.band)
+        try:
+            self.preview_image = create_band_image(self.band)
+        except FileNotFoundError as e:
+            CTkMessagebox(title="Error", message=str(e), icon="cancel")
+            return
         if self.preview_image is None:
             return
         ctk_image = ctk.CTkImage(
@@ -475,23 +484,61 @@ class App(ctk.CTk):
         )
         self.lbl_preview.configure(image=ctk_image, text="")
 
+    def refresh_elements(self):
+        self.var_bg_path.set(self.band.image_path)
+        self.slider_margin.set(self.band.margin)
+        self.lbl_margin_val.configure(text=f"{self.band.margin}px")
+
     def refresh_ui(self):
+        self.refresh_elements()
         self.refresh_preview()
         self.refresh_badges_list()
 
     def load_preset(self):
-        # Load preset data from file or database
-        pass
+        path = askopenfilename(
+            filetypes=[("JSON Files", "*.json")],
+            initialdir=DEFAULT_PRESET_PATH,
+            title="Load Preset",
+        )
+        if path is None:
+            return
+        self.var_preset.set(path)
+        try:
+            self.band = LeatherBand.load_from_file(path)
+        except Exception as e:
+            CTkMessagebox(
+                title="Error", message=f"Failed to load preset: {e}", icon="cancel"
+            )
+        self.refresh_ui()
 
-    def save_preset(self):
-        # Save current state as a preset
-        pass
+    def new_preset(self):
+        path = asksaveasfilename(
+            filetypes=[("json", "*.json")],
+            initialdir=DEFAULT_PRESET_PATH,
+            title="Save Preset",
+        )
+        if path is None:
+            return
+        self.var_preset.set(path)
+        self.band = LeatherBand()
+        try:
+            self.band.save_to_file(path)
+        except Exception as e:
+            CTkMessagebox(
+                title="Error", message=f"Failed to save preset: {e}", icon="cancel"
+            )
+        self.refresh_ui()
 
     def select_background(self):
         path = askopenfilename(
             title="Select Background", filetypes=[("PNG Files", "*.png")]
         )
-        if path is None or not os.path.exists(path):
+        if path is None or path == "" or path == ():
+            return
+        if not os.path.exists(path):
+            CTkMessagebox(
+                title="Error", message=f"File not found: {path}", icon="cancel"
+            )
             return
         self.band.image_path = path
         self.var_bg_path.set(path)
@@ -499,9 +546,9 @@ class App(ctk.CTk):
 
     def on_margin_change(self, event):
         val = int(event)
-        self.lbl_margin_val.configure(text=f"{val}px")
         self.band.margin = val
         self.refresh_preview()
+        self.refresh_elements()
 
     def add_badge(self):
         path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
@@ -556,5 +603,28 @@ class App(ctk.CTk):
         self.refresh_badges_list()
 
     def export_image(self):
-        # Export the current image
+        if self.preview_image is None:
+            CTkMessagebox(title="Export Error", message="No image to export")
+            return
+        if os.path.exists(self.var_preset.get()):
+            try:
+                self.band.save_to_file(self.var_preset.get())
+                preset_name = pathlib.Path(self.var_preset.get()).stem
+            except Exception as e:
+                CTkMessagebox(
+                    title="Export Error", message=f"Failed to save preset: {e}"
+                )
+                return
+        else:
+            CTkMessagebox(title="Export Error", message="Preset file not found")
+            preset_name = "default"
+
+        path = os.path.join(DEFAULT_EXPORT_PATH, preset_name + ".png")
+        try:
+            self.preview_image.save(path, format="PNG")
+        except Exception as e:
+            CTkMessagebox(title="Export Error", message=f"Failed to export image: {e}")
+            return
+
+        CTkMessagebox(title="Export", message=f"Image exported to {path}")
         pass

@@ -3,6 +3,19 @@ revision = 3
 requires-python = ">=3.14"
 
 [[package]]
+name = "ctkmessagebox"
+version = "2.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "customtkinter" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/c3/1e4235e586e3b846bc5c82719760041f815a26c7d8b8933402e08216e81c/ctkmessagebox-2.7.tar.gz", hash = "sha256:5ce7e76b797c8d5de5f29438d8c784e33c72fb6ff666c87eb8991815c46c59c5", size = 126355, upload-time = "2024-06-29T07:53:30.19Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/e0/827193418fd1c0b2f7c64cb0fec255996e40da69e05b2454fd1375a64eff/CTkMessagebox-2.7-py3-none-any.whl", hash = "sha256:68941ccab2251f2fd3ac3338a99bdd30d9f28fee4ef0070dfdd0420be1c34a5a", size = 125878, upload-time = "2024-06-29T07:53:26.47Z" },
+]
+
+[[package]]
 name = "customtkinter"
 version = "5.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -42,6 +55,7 @@ name = "lederband"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "ctkmessagebox" },
     { name = "customtkinter" },
     { name = "dataclasses-json" },
     { name = "pillow" },
@@ -49,6 +63,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ctkmessagebox", specifier = ">=2.7" },
     { name = "customtkinter", specifier = ">=5.2.2" },
     { name = "dataclasses-json", specifier = ">=0.6.7" },
     { name = "pillow", specifier = ">=12.1.0" },

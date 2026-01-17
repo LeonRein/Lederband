@@ -20,14 +20,14 @@ class Badge:
 
     def get_image(self):
         if not self.image_path or not os.path.exists(self.image_path):
-            return None
+            raise FileNotFoundError(f"Badge image not found: {self.image_path}")
         return Image.open(self.image_path).convert("RGBA")
 
     image_path: str
 
 
-@dataclass
 @dataclass_json
+@dataclass
 class BadgeRow:
     """Class representing a row of badges."""
 
@@ -42,13 +42,13 @@ class BadgeRow:
 class LeatherBand:
     """Class representing the entire leather band configuration."""
 
-    image_path: str
-    margin: int
+    image_path: str = ""
+    margin: int = 6
     badges: List[Badge | BadgeRow] = dataclasses.field(default_factory=list)
 
     def get_image(self):
         if not self.image_path or not os.path.exists(self.image_path):
-            return None
+            raise FileNotFoundError(f"Background image not found: {self.image_path}")
         return Image.open(self.image_path).convert("RGBA")
 
     def save_to_file(self, filepath: str):
