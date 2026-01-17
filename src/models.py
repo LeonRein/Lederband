@@ -26,6 +26,17 @@ class Badge:
     image_path: str
 
 
+@dataclass
+@dataclass_json
+class BadgeRow:
+    """Class representing a row of badges."""
+
+    badges: List[Badge]
+
+    def __init__(self, *args):
+        self.badges = [Badge(arg) for arg in args]
+
+
 @dataclass_json
 @dataclass
 class LeatherBand:
@@ -33,7 +44,7 @@ class LeatherBand:
 
     image_path: str
     margin: int
-    badges: List[Badge] = dataclasses.field(default_factory=list)
+    badges: List[Badge | BadgeRow] = dataclasses.field(default_factory=list)
 
     def get_image(self):
         if not self.image_path or not os.path.exists(self.image_path):

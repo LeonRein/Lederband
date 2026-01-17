@@ -1,23 +1,178 @@
 import os
 from tkinter.filedialog import askopenfilename
-from typing import Optional
+from typing import Callable, Optional
 
 import customtkinter as ctk
 from PIL.Image import Image
 
 from src.engine import create_band_image
-from src.models import Badge, LeatherBand
+from src.models import Badge, BadgeRow, LeatherBand
 
 
-class BadgeRow(ctk.CTkFrame):
-    def __init__(self, master, badge, index: int, on_up, on_down, on_change, on_delete):
-        super().__init__(master)
-        self.badge = badge
+class BadgeListElement:
+    def __init__(
+        self,
+        index: int,
+        length: int,
+        on_up=None,
+        on_down=None,
+        on_change=None,
+        on_delete=None,
+    ) -> None:
         self.index = index
-        self.on_up = on_up
-        self.on_down = on_down
-        self.on_change = on_change
-        self.on_delete = on_delete
+        self.length = length
+        self.on_up: Optional[Callable[[int], None]] = on_up
+        self.on_down: Optional[Callable[[int], None]] = on_down
+        self.on_change: Optional[Callable[[None], None]] = on_change
+        self.on_delete: Optional[Callable[[int], None]] = on_delete
+        self.btn_up = ctk.CTkButton(self, text="↑", width=30, command=self._up)
+        self.btn_down = ctk.CTkButton(self, text="↓", width=30, command=self._down)
+        self.btn_change = ctk.CTkButton(
+            self, text="Change", width=60, command=self._change
+        )
+        if self.on_delete is not None:
+            self.btn_del = ctk.CTkButton(
+                self,
+                text="X",
+                width=30,
+                fg_color="red",
+                hover_color="darkred",
+                command=self._delete,
+            )
+
+        BadgeListElement.refresh_ui(self)
+
+    def _refresh_buttons(self):
+        if self.index == self.length - 1:
+            self.btn_up.configure(state="disabled")
+        else:
+            self.btn_up.configure(state="normal")
+        if self.index == 0:
+            self.btn_down.configure(state="disabled")
+        else:
+            self.btn_down.configure(state="normal")
+
+    def refresh_ui(self):
+        self._refresh_buttons()
+
+    def _up(self):
+        if self.on_up:
+            self.on_up(self.index)
+
+    def _down(self):
+        if self.on_down:
+            self.on_down(self.index)
+
+    def _change(self):
+        if self.on_change:
+            self.on_change()
+
+    def _delete(self):
+        if self.on_delete:
+            self.on_delete(self.index)
+
+
+class BadgeRowFrame(ctk.CTkFrame, BadgeListElement):
+    def __init__(
+        self,
+        master,
+        badge_row,
+        index: int,
+        length: int,
+        on_up,
+        on_down,
+        on_change,
+        on_delete,
+    ):
+        ctk.CTkFrame.__init__(self, master, fg_color=("gray75", "gray25"))
+        BadgeListElement.__init__(
+            self, index, length, on_up, on_down, on_change, on_delete
+        )
+        self.badge_row = badge_row
+
+        self.grid_columnconfigure(0, weight=1)
+
+        # Buttons
+        self.btn_up.grid(row=0, column=1, padx=2, pady=(5, 0))
+
+        self.btn_down.grid(row=0, column=2, padx=2, pady=(5, 0))
+
+        self.btn_change.configure(text="", fg_color="transparent", state="hidden")
+        self.btn_change.grid(row=0, column=3, padx=2, pady=(5, 0))
+
+        self.btn_del.grid(row=0, column=4, padx=5, pady=(5, 0))
+
+        self.badges_list = ctk.CTkFrame(self, fg_color="transparent")
+        self.badges_list.grid(row=1, columnspan=5, padx=0, pady=0, sticky="ew")
+
+        self.badges_list.grid_columnconfigure(0, weight=1)
+
+        self.refresh_ui()
+
+    def _refresh_badges_list(self):
+        for widget in self.badges_list.winfo_children():
+            widget.destroy()
+        for i, badge in enumerate(self.badge_row.badges):
+            badge_frame = BadgeFrame(
+                self.badges_list,
+                badge,
+                i,
+                len(self.badge_row.badges),
+                self._on_badge_up,
+                self._on_badge_down,
+                self._on_badge_change,
+                None,
+            )
+            if i == 0:
+                badge_frame.pack(padx=5, pady=5, side="bottom", fill="x")
+            else:
+                badge_frame.pack(padx=5, pady=(5, 0), side="bottom", fill="x")
+
+    def refresh_ui(self):
+        self._refresh_badges_list()
+        self._refresh_buttons()
+
+    def _on_badge_up(self, index):
+        if index >= len(self.badge_row.badges) - 1:
+            return
+        self.badge_row.badges[index], self.badge_row.badges[index + 1] = (
+            self.badge_row.badges[index + 1],
+            self.badge_row.badges[index],
+        )
+        self._refresh_badges_list()
+        super()._change()
+
+    def _on_badge_down(self, index):
+        if index == 0:
+            return
+        self.badge_row.badges[index], self.badge_row.badges[index - 1] = (
+            self.badge_row.badges[index - 1],
+            self.badge_row.badges[index],
+        )
+        self._refresh_badges_list()
+        super()._change()
+
+    def _on_badge_change(self):
+        BadgeListElement._change(self)
+
+
+class BadgeFrame(ctk.CTkFrame, BadgeListElement):
+    def __init__(
+        self,
+        master,
+        badge,
+        index: int,
+        length: int,
+        on_up,
+        on_down,
+        on_change,
+        on_delete,
+    ):
+        ctk.CTkFrame.__init__(self, master)
+        BadgeListElement.__init__(
+            self, index, length, on_up, on_down, on_change, on_delete
+        )
+        self.badge = badge
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -26,38 +181,21 @@ class BadgeRow(ctk.CTkFrame):
         self.label.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
         # Buttons
-        self.btn_up = ctk.CTkButton(self, text="↑", width=30, command=self._up)
-        self.btn_up.grid(row=0, column=1, padx=2)
+        self.btn_up.grid(row=0, column=1, padx=(0, 5))
 
-        self.btn_down = ctk.CTkButton(self, text="↓", width=30, command=self._down)
-        self.btn_down.grid(row=0, column=2, padx=2)
+        self.btn_down.grid(row=0, column=2, padx=(0, 5))
 
-        self.btn_change = ctk.CTkButton(
-            self, text="Change", width=60, command=self._change
-        )
-        self.btn_change.grid(row=0, column=3, padx=2)
+        self.btn_change.grid(row=0, column=3, padx=(0, 5))
 
-        self.btn_del = ctk.CTkButton(
-            self,
-            text="X",
-            width=30,
-            fg_color="red",
-            hover_color="darkred",
-            command=self._delete,
-        )
-        self.btn_del.grid(row=0, column=4, padx=5)
-
-    def _up(self):
-        self.on_up(self.index)
-
-    def _down(self):
-        self.on_down(self.index)
+        if self.on_delete is not None:
+            self.btn_del.grid(row=0, column=4, padx=(0, 5))
 
     def _change(self):
-        self.on_change(self.index)
-
-    def _delete(self):
-        self.on_delete(self.index)
+        path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
+        if path is None or not os.path.exists(path):
+            return
+        self.badge.image_path = path
+        super()._change()
 
 
 class App(ctk.CTk):
@@ -232,17 +370,32 @@ class App(ctk.CTk):
         )
         self.lbl_badges.grid(
             row=0,
-            column=0,
+            columnspan=2,
             padx=self.padding,
             pady=(self.padding, self.padding / 2),
             sticky="ew",
         )
 
-        self.btn_add = ctk.CTkButton(
+        self.btn_add_badge = ctk.CTkButton(
             self.badges_frame, text="Add Badge", command=self.add_badge
         )
-        self.btn_add.grid(
-            row=1, column=0, padx=self.padding, pady=self.padding / 2, sticky="ew"
+        self.btn_add_badge.grid(
+            row=1,
+            column=0,
+            padx=(self.padding, self.padding / 2),
+            pady=self.padding / 2,
+            sticky="ew",
+        )
+
+        self.btn_add_badge_row = ctk.CTkButton(
+            self.badges_frame, text="Add Badge Row", command=self.add_badge_row
+        )
+        self.btn_add_badge_row.grid(
+            row=1,
+            column=1,
+            padx=(self.padding / 2, self.padding),
+            pady=self.padding / 2,
+            sticky="ew",
         )
 
         self.badges_list = ctk.CTkScrollableFrame(
@@ -250,7 +403,7 @@ class App(ctk.CTk):
         )
         self.badges_list.grid(
             row=2,
-            column=0,
+            columnspan=2,
             padx=0,
             pady=(self.padding / 2, 0),
             sticky="nsew",
@@ -287,16 +440,29 @@ class App(ctk.CTk):
         for widget in self.badges_list.winfo_children():
             widget.destroy()
         for i, badge in enumerate(self.band.badges):
-            badge_row = BadgeRow(
-                self.badges_list,
-                badge,
-                i,
-                self._on_badge_up,
-                self._on_badge_down,
-                self._on_badge_change,
-                self._on_badge_delete,
-            )
-            badge_row.pack(fill="x", side="bottom")
+            if isinstance(badge, Badge):
+                badge_ui = BadgeFrame(
+                    self.badges_list,
+                    badge,
+                    i,
+                    len(self.band.badges),
+                    self._on_badge_up,
+                    self._on_badge_down,
+                    self._on_badge_change,
+                    self._on_badge_delete,
+                )
+            else:
+                badge_ui = BadgeRowFrame(
+                    self.badges_list,
+                    badge,
+                    i,
+                    len(self.band.badges),
+                    self._on_badge_up,
+                    self._on_badge_down,
+                    self._on_badge_change,
+                    self._on_badge_delete,
+                )
+            badge_ui.pack(fill="x", side="bottom", pady=5)
 
     def refresh_preview(self):
         self.preview_image = create_band_image(self.band)
@@ -345,11 +511,18 @@ class App(ctk.CTk):
         self.refresh_badges_list()
         self.refresh_preview()
 
-    def _on_badge_change(self, index):
-        path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
-        if path is None or not os.path.exists(path):
+    def add_badge_row(self):
+        path1 = askopenfilename(
+            title="Select Badge", filetypes=[("PNG Files", "*.png")]
+        )
+        if path1 is None or not os.path.exists(path1):
             return
-        self.band.badges[index].image_path = path
+        path2 = askopenfilename(
+            title="Select Badge", filetypes=[("PNG Files", "*.png")]
+        )
+        if path2 is None or not os.path.exists(path2):
+            return
+        self.band.badges.append(BadgeRow(path1, path2))
         self.refresh_badges_list()
         self.refresh_preview()
 
@@ -357,6 +530,10 @@ class App(ctk.CTk):
         del self.band.badges[index]
         self.refresh_badges_list()
         self.refresh_preview()
+
+    def _on_badge_change(self):
+        self.refresh_preview()
+        self.refresh_badges_list()
 
     def _on_badge_up(self, index):
         if index >= len(self.band.badges) - 1:
