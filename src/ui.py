@@ -547,6 +547,9 @@ class App(ctk.CTk):
         )
         if path is None or path == "" or path == ():
             return
+        path = pathlib.Path(path)
+        if path.suffix == "":
+            path = path.with_suffix(".json")
         path = os.path.relpath(path)
         self.var_preset.set(path)
         self.band = LeatherBand()
