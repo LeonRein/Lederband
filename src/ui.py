@@ -5,7 +5,6 @@ from typing import Callable, Optional
 
 import customtkinter as ctk
 from CTkMessagebox import CTkMessagebox
-from customtkinter.windows.widgets.font import customtkinter_directory
 from PIL.Image import Image
 
 from src.engine import create_band_image
@@ -609,6 +608,7 @@ class App(ctk.CTk):
             CTkMessagebox(
                 title="Error", message="You can only select up to two badges."
             )
+            return
         elif len(path1) == 1:
             paths.append(path1[0])
             path2 = askopenfilename(

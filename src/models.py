@@ -33,6 +33,10 @@ class BadgeRow:
 
     badges: List[Badge]
 
+    @property
+    def name(self):
+        return ", ".join(badge.name for badge in self.badges)
+
     @classmethod
     def from_paths(cls, *args):
         badges = [Badge(arg) for arg in args]
@@ -44,10 +48,10 @@ def union_decoder(data):
     for item in data:
         # Try to parse as A first
         if "badges" in item:
-            results.append(BadgeRow.from_dict(item))
+            results.append(BadgeRow.from_dict(item))  # pyright: ignore[reportAttributeAccessIssue]
         # Then try B
         else:
-            results.append(Badge.from_dict(item))
+            results.append(Badge.from_dict(item))  # pyright: ignore[reportAttributeAccessIssue]
     return results
 
 
@@ -69,9 +73,9 @@ class LeatherBand:
 
     def save_to_file(self, filepath: str):
         with open(filepath, "w") as f:
-            f.write(self.to_json())
+            f.write(self.to_json())  # pyright: ignore[reportAttributeAccessIssue]
 
     @classmethod
     def load_from_file(cls, filepath: str) -> "LeatherBand":
         with open(filepath, "r") as f:
-            return cls.from_json(f.read())
+            return cls.from_json(f.read())  # pyright: ignore[reportAttributeAccessIssue]
