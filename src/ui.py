@@ -484,7 +484,7 @@ class App(ctk.CTk):
             or self.band.image_path == ()
         ):
             self.preview_image = None
-            self.lbl_preview.configure(image=None, text="No Background image selected")
+            self.lbl_preview.configure(image="", text="No Background image selected")
             return
         try:
             self.preview_image = create_band_image(self.band)
@@ -494,7 +494,7 @@ class App(ctk.CTk):
             CTkMessagebox(title="Error", message=str(e), icon="cancel")
             return
         if self.preview_image is None:
-            self.lbl_preview.configure(image=None, text="No Preview")
+            self.lbl_preview.configure(image="", text="No Preview")
         else:
             ctk_image = ctk.CTkImage(
                 light_image=self.preview_image,
@@ -575,6 +575,7 @@ class App(ctk.CTk):
         self.band.image_path = path
         self.var_bg_path.set(path)
         self.refresh_preview()
+        self.refresh_elements()
 
     def on_margin_change(self, event):
         val = int(event)
