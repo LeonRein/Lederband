@@ -19,11 +19,11 @@ class Badge:
         return path.stem
 
     def get_image(self):
-        if not self.image_path or not os.path.exists(self.image_path):
+        if not self.image_path or not os.path.exists(os.path.abspath(self.image_path)):
             raise FileNotFoundError(f"Badge image not found: {self.image_path}")
-        return Image.open(self.image_path).convert("RGBA")
+        return Image.open(os.path.abspath(self.image_path)).convert("RGBA")
 
-    image_path: str
+    image_path: str = ""
 
 
 @dataclass_json
@@ -63,9 +63,9 @@ class LeatherBand:
     )
 
     def get_image(self):
-        if not self.image_path or not os.path.exists(self.image_path):
+        if not self.image_path or not os.path.exists(os.path.abspath(self.image_path)):
             raise FileNotFoundError(f"Background image not found: {self.image_path}")
-        return Image.open(self.image_path).convert("RGBA")
+        return Image.open(os.path.abspath(self.image_path)).convert("RGBA")
 
     def save_to_file(self, filepath: str):
         with open(filepath, "w") as f:

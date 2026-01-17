@@ -58,7 +58,10 @@ def create_band_image(band: LeatherBand) -> Optional[Image.Image]:
 
             # scale the image to fit the background width
             scale = bg_width / b_width
-            image = image.resize((int(b_width * scale), int(b_height * scale)))
+            image = image.resize(
+                (int(b_width * scale), int(b_height * scale)),
+                resample=Image.Resampling.LANCZOS,
+            )
 
             b_width, b_height = image.size
 

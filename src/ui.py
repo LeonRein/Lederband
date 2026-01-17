@@ -1,10 +1,11 @@
 import os
 import pathlib
-from tkinter.filedialog import askopenfilename, asksaveasfilename
+from tkinter.filedialog import askopenfilename, askopenfilenames, asksaveasfilename
 from typing import Callable, Optional
 
 import customtkinter as ctk
 from CTkMessagebox import CTkMessagebox
+from customtkinter.windows.widgets.font import customtkinter_directory
 from PIL.Image import Image
 
 from src.engine import create_band_image
@@ -12,6 +13,8 @@ from src.models import Badge, BadgeRow, LeatherBand
 
 DEFAULT_PRESET_PATH = os.path.join(os.getcwd(), "presets/")
 DEFAULT_EXPORT_PATH = os.path.join(os.getcwd(), "output/")
+DEFAULT_BADGE_PATH = os.path.join(os.getcwd(), "input/badges/")
+DEFAULT_BACKGROUND_PATH = os.path.join(os.getcwd(), "input/backgrounds/")
 
 
 class BadgeListElement:
@@ -28,7 +31,7 @@ class BadgeListElement:
         self.length = length
         self.on_up: Optional[Callable[[int], None]] = on_up
         self.on_down: Optional[Callable[[int], None]] = on_down
-        self.on_change: Optional[Callable[[None], None]] = on_change
+        self.on_change: Optional[Callable[[], None]] = on_change
         self.on_delete: Optional[Callable[[int], None]] = on_delete
         self.btn_up = ctk.CTkButton(self, text="↑", width=30, command=self._up)
         self.btn_down = ctk.CTkButton(self, text="↓", width=30, command=self._down)
@@ -196,7 +199,11 @@ class BadgeFrame(ctk.CTkFrame, BadgeListElement):
             self.btn_del.grid(row=0, column=4, padx=(0, 5))
 
     def _change(self):
-        path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
+        path = askopenfilename(
+            title="Select Badge",
+            filetypes=[("PNG Files", "*.png")],
+            initialdir=DEFAULT_BADGE_PATH,
+        )
         if path is None or not os.path.exists(path):
             return
         self.badge.image_path = path
@@ -241,7 +248,7 @@ class App(ctk.CTk):
             self.preset_frame,
             text="Preset",
             font=self.heading_font,
-            fg_color="gray30",
+            fg_color=("gray70", "gray30"),
             corner_radius=6,
         )
         self.lbl_preset.grid(
@@ -288,7 +295,7 @@ class App(ctk.CTk):
             self.bg_frame,
             text="Background",
             font=self.heading_font,
-            fg_color="gray30",
+            fg_color=("gray70", "gray30"),
             corner_radius=6,
         )
         self.lbl_bg.grid(
@@ -328,7 +335,7 @@ class App(ctk.CTk):
             self.margin_frame,
             text="Margin",
             font=self.heading_font,
-            fg_color="gray30",
+            fg_color=("gray70", "gray30"),
             corner_radius=6,
         )
         self.lbl_margin.grid(
@@ -370,7 +377,7 @@ class App(ctk.CTk):
             self.badges_frame,
             text="Badges",
             font=self.heading_font,
-            fg_color="gray30",
+            fg_color=("gray70", "gray30"),
             corner_radius=6,
         )
         self.lbl_badges.grid(
@@ -417,7 +424,7 @@ class App(ctk.CTk):
         # 3. Bottom Section - Export
         self.btn_export = ctk.CTkButton(
             self.left_panel,
-            text="Export Image",
+            text="Export Image and Save Preset",
             fg_color="green",
             hover_color="darkgreen",
             command=self.export_image,
@@ -440,6 +447,8 @@ class App(ctk.CTk):
 
         self.lbl_preview = ctk.CTkLabel(self.preview_panel, text="Preview")
         self.lbl_preview.grid(row=0, column=0, padx=5, pady=5)
+
+        self.refresh_elements()
 
     def refresh_badges_list(self):
         for widget in self.badges_list.winfo_children():
@@ -499,6 +508,14 @@ class App(ctk.CTk):
         self.var_bg_path.set(self.band.image_path)
         self.slider_margin.set(self.band.margin)
         self.lbl_margin_val.configure(text=f"{self.band.margin}px")
+        if os.path.exists(self.var_preset.get()):
+            self.lbl_preset.configure(fg_color=("gray70", "gray30"))
+        else:
+            self.lbl_preset.configure(fg_color="red")
+        if os.path.exists(self.var_bg_path.get()):
+            self.lbl_bg.configure(fg_color=("gray70", "gray30"))
+        else:
+            self.lbl_bg.configure(fg_color="red")
 
     def refresh_ui(self):
         self.refresh_elements()
@@ -511,8 +528,9 @@ class App(ctk.CTk):
             initialdir=DEFAULT_PRESET_PATH,
             title="Load Preset",
         )
-        if path is None:
+        if path is None or path == "" or path == ():
             return
+        path = os.path.relpath(path)
         self.var_preset.set(path)
         try:
             self.band = LeatherBand.load_from_file(path)
@@ -528,8 +546,9 @@ class App(ctk.CTk):
             initialdir=DEFAULT_PRESET_PATH,
             title="Save Preset",
         )
-        if path is None:
+        if path is None or path == "" or path == ():
             return
+        path = os.path.relpath(path)
         self.var_preset.set(path)
         self.band = LeatherBand()
         try:
@@ -542,10 +561,13 @@ class App(ctk.CTk):
 
     def select_background(self):
         path = askopenfilename(
-            title="Select Background", filetypes=[("PNG Files", "*.png")]
+            title="Select Background",
+            filetypes=[("PNG Files", "*.png")],
+            initialdir=DEFAULT_BACKGROUND_PATH,
         )
         if path is None or path == "" or path == ():
             return
+        path = os.path.relpath(path)
         if not os.path.exists(path):
             CTkMessagebox(
                 title="Error", message=f"File not found: {path}", icon="cancel"
@@ -562,25 +584,44 @@ class App(ctk.CTk):
         self.refresh_elements()
 
     def add_badge(self):
-        path = askopenfilename(title="Select Badge", filetypes=[("PNG Files", "*.png")])
-        if path is None or not os.path.exists(path):
+        path = askopenfilename(
+            title="Select Badge",
+            filetypes=[("PNG Files", "*.png")],
+            initialdir=DEFAULT_BADGE_PATH,
+        )
+        if path is None or path == "" or path == ():
             return
+        path = os.path.relpath(path)
         self.band.badges.append(Badge(path))
         self.refresh_badges_list()
         self.refresh_preview()
 
     def add_badge_row(self):
-        path1 = askopenfilename(
-            title="Select Badge", filetypes=[("PNG Files", "*.png")]
+        paths = []
+        path1 = askopenfilenames(
+            title="Select Two Badges",
+            filetypes=[("PNG Files", "*.png")],
+            initialdir=DEFAULT_BADGE_PATH,
         )
-        if path1 is None or not os.path.exists(path1):
+        if path1 is None or path1 == "" or path1 == () or len(path1) == 0:
             return
-        path2 = askopenfilename(
-            title="Select Badge", filetypes=[("PNG Files", "*.png")]
-        )
-        if path2 is None or not os.path.exists(path2):
-            return
-        self.band.badges.append(BadgeRow.from_paths(path1, path2))
+        if len(path1) > 2:
+            CTkMessagebox(
+                title="Error", message="You can only select up to two badges."
+            )
+        elif len(path1) == 1:
+            paths.append(path1[0])
+            path2 = askopenfilename(
+                title="Select Badge",
+                filetypes=[("PNG Files", "*.png")],
+                initialdir=DEFAULT_BADGE_PATH,
+            )
+            if path2 is None or path2 == "" or path2 == ():
+                return
+            paths.append(path2)
+        elif len(path1) == 2:
+            paths.extend(path1)
+        self.band.badges.append(BadgeRow.from_paths(*paths))
         self.refresh_badges_list()
         self.refresh_preview()
 
