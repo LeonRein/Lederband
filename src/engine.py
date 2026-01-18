@@ -42,14 +42,14 @@ class Engine:
     def __generate_name_image_mask(self):
         if self.__background_image is None:
             self.__name_image_bbox = None
-            return None
+            return
 
-        gray_img = self.__background_image.convert("L")
-        img_array = np.array(gray_img)
+        alpha = self.__background_image.split()[3]
+        img_array = np.array(alpha)
 
         # 2. Threshold to ensure we only have pure white (255) vs the rest
         # If your "white" isn't perfect, you can adjust the threshold value
-        _, binary = cv2.threshold(img_array, 254, 255, cv2.THRESH_BINARY)
+        _, binary = cv2.threshold(img_array, 20, 255, cv2.THRESH_BINARY_INV)
 
         # 3. Find connected components
         # connectivity=8 includes diagonals; connectivity=4 does not
@@ -59,6 +59,7 @@ class Engine:
 
         # If only background is found (num_labels = 1), return None
         if num_labels < 2:
+            self.__name_image_bbox = None
             return None
 
         # 4. Filter out the background label (always index 0) and find the largest area
@@ -73,9 +74,9 @@ class Engine:
         h = stats[largest_label, cv2.CC_STAT_HEIGHT]
         self.__name_image_bbox = (x, y, w + x, h + y)
 
-        bg_crop = self.__background_image.crop(self.__name_image_bbox)
-        self.__name_image_mask = bg_crop.convert("L").point(
-            lambda p: 255 if p > 254 else 0  # pyright: ignore[reportOperatorIssue]
+        alpha_crop = alpha.crop(self.__name_image_bbox)
+        self.__name_image_mask = alpha_crop.point(
+            lambda p: 255 if p < 20 else 0  # pyright: ignore[reportOperatorIssue]
         )
 
     def __generate_name_image(self):
@@ -98,7 +99,7 @@ class Engine:
             rotate = True
             w, h = h, w
 
-        name_image = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+        name_image = Image.new("RGBA", (w, h), (255, 255, 255, 255))
         draw = ImageDraw.Draw(name_image)
         draw.fontmode = "1"
 
