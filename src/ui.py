@@ -129,7 +129,7 @@ class BadgeListElement:
         self.length = length
         self.on_up: Optional[Callable[[int], None]] = on_up
         self.on_down: Optional[Callable[[int], None]] = on_down
-        self.on_change: Optional[Callable[[], None]] = on_change
+        self.on_change: Optional[Callable[[int], None]] = on_change
         self.on_delete: Optional[Callable[[int], None]] = on_delete
         self.btn_up = ctk.CTkButton(self, text="↑", width=30, command=self._up)
         self.btn_down = ctk.CTkButton(self, text="↓", width=30, command=self._down)
@@ -171,7 +171,7 @@ class BadgeListElement:
 
     def _change(self):
         if self.on_change:
-            self.on_change()
+            self.on_change(self.index)
 
     def _delete(self):
         if self.on_delete:
@@ -258,7 +258,7 @@ class BadgeRowFrame(ctk.CTkFrame, BadgeListElement):
         self._refresh_badges_list()
         super()._change()
 
-    def _on_badge_change(self):
+    def _on_badge_change(self, _):
         BadgeListElement._change(self)
 
 
@@ -663,6 +663,9 @@ class App(ctk.CTk):
             initialdir=DEFAULT_BADGE_PATH,
         )
         self.band.badges.append(badge)
+        message = self.engine.check_badge_scaling(badge)
+        if message:
+            CTkMessagebox(app, title="warning", message=message, icon="warning")
         self.refresh_badges_list()
         self.refresh_preview()
 
@@ -674,7 +677,9 @@ class App(ctk.CTk):
             num=2,
         )
         self.band.badges.append(badge_row)
-
+        message = self.engine.check_badge_row_scaling(badge_row)
+        if message:
+            CTkMessagebox(app, title="warning", message=message, icon="warning")
         self.refresh_badges_list()
         self.refresh_preview()
 
@@ -683,7 +688,15 @@ class App(ctk.CTk):
         self.refresh_badges_list()
         self.refresh_preview()
 
-    def _on_badge_change(self):
+    def _on_badge_change(self, index):
+        if isinstance(self.band.badges[index], BadgeRow):
+            message = self.engine.check_badge_row_scaling(self.band.badges[index])
+            if message:
+                CTkMessagebox(app, title="warning", message=message, icon="warning")
+        elif isinstance(self.band.badges[index], Badge):
+            message = self.engine.check_badge_scaling(self.band.badges[index])
+            if message:
+                CTkMessagebox(app, title="warning", message=message, icon="warning")
         self.refresh_preview()
         self.refresh_badges_list()
 
@@ -707,6 +720,17 @@ class App(ctk.CTk):
         self.refresh_preview()
         self.refresh_badges_list()
 
+    def __check_all_badges_scaling(self):
+        for badge in self.band.badges:
+            if isinstance(badge, Badge):
+                message = self.engine.check_badge_scaling(badge)
+                if message:
+                    CTkMessagebox(app, title="warning", message=message, icon="warning")
+            elif isinstance(badge, BadgeRow):
+                message = self.engine.check_badge_row_scaling(badge)
+                if message:
+                    CTkMessagebox(app, title="warning", message=message, icon="warning")
+
     def export_image(self):
         date = datetime.now().strftime("%Y-%m-%d")
         file_name = f"{date}"
@@ -724,7 +748,12 @@ class App(ctk.CTk):
                 )
                 return
         else:
-            CTkMessagebox(app, title="Export Error", message="Preset file not found")
+            CTkMessagebox(
+                app,
+                title="Warning",
+                message="Preset file not found. Savind without preset",
+                icon="warning",
+            )
             preset_name = "default"
 
         path = os.path.join(DEFAULT_EXPORT_PATH, file_name)
@@ -741,7 +770,8 @@ class App(ctk.CTk):
             title="Export",
             message=f'Image exported to "{path}".\nPreset saved to "{preset_name}"',
         )
-        pass
+
+        self.__check_all_badges_scaling()
 
 
 app = App()

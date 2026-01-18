@@ -1,7 +1,7 @@
 import dataclasses
 import os
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 from dataclasses_json import config, dataclass_json
@@ -14,6 +14,9 @@ class Badge:
     """Class representing a single badge."""
 
     image_path: str = ""
+    scale_warning_showed: bool = field(
+        default=False, metadata=config(exclude=lambda x: True)
+    )
 
     @property
     def name(self):
@@ -32,6 +35,9 @@ class BadgeRow:
     """Class representing a row of badges."""
 
     badges: List[Badge] = dataclasses.field(default_factory=list)
+    scale_warning_showed: bool = field(
+        default=False, metadata=config(exclude=lambda x: True)
+    )
 
     @property
     def name(self):

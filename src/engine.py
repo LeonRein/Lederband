@@ -148,6 +148,48 @@ class Engine:
 
         return new_image
 
+    def check_badge_scaling(self, badge: Badge) -> Optional[str]:
+        if badge.scale_warning_showed:
+            return None
+
+        try:
+            image = badge.get_image()
+        except FileNotFoundError as e:
+            return f"Badge image not found: {e}"
+        except Exception as e:
+            return f"Error loading badge image: {e}"
+
+        if self.__background_image is None:
+            return None
+
+        if image.width != self.__background_image.width:
+            badge.scale_warning_showed = True
+            return f"Badge {badge.name}:\nWidth ({image.width}) does not match background image width ({self.__background_image.width})"
+
+    def check_badge_row_scaling(self, row: BadgeRow) -> Optional[str]:
+        if row.scale_warning_showed:
+            return None
+
+        width = 0
+        for badge in row.badges:
+            try:
+                image = badge.get_image()
+            except FileNotFoundError as e:
+                return f"Badge image not found: {e}"
+            except Exception as e:
+                return f"Error loading badge image: {e}"
+            width += image.width
+
+        if len(row.badges) > 1:
+            width -= 2 * (len(row.badges) - 1)
+
+        if self.__background_image is None:
+            return None
+
+        if width != self.__background_image.width:
+            row.scale_warning_showed = True
+            return f"Row {row.name}:\nWidth ({width}) does not match background image width ({self.__background_image.width})"
+
     def create_band_image(self) -> Optional[Image.Image]:
         if self.__band is None or self.__background_image is None:
             return None
