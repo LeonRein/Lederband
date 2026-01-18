@@ -16,6 +16,99 @@ DEFAULT_BADGE_PATH = os.path.join(os.getcwd(), "input/badges/")
 DEFAULT_BACKGROUND_PATH = os.path.join(os.getcwd(), "input/backgrounds/")
 
 
+def select_image(self, title: str, initialdir: str):
+    path = askopenfilename(
+        title=title, initialdir=initialdir, filetypes=[("PNG Files", "*.png")]
+    )
+    if path is None or path == "" or path == ():
+        return
+    if not os.path.exists(path):
+        CTkMessagebox(title="Error", message="File not found", icon="cancel")
+        return
+    path = os.path.relpath(path)
+    self.image_path = path
+
+
+def select_images(self, title: str, initialdir: str, num: int):
+    # select images functionality for the BadgeRow class
+    paths = []
+    while len(paths) < num:
+        if num - len(paths) == 1:
+            path = askopenfilename(
+                title=title, initialdir=initialdir, filetypes=[("PNG Files", "*.png")]
+            )
+            if path is None or path == "" or path == ():
+                return
+            if not os.path.exists(path):
+                CTkMessagebox(title="Error", message="File not found", icon="cancel")
+                return
+            path = os.path.relpath(path)
+            paths.append(path)
+        else:
+            preleim_paths = askopenfilenames(
+                title=title, initialdir=initialdir, filetypes=[("PNG Files", "*.png")]
+            )
+            for path in preleim_paths:
+                if path is None or path == "" or path == ():
+                    return
+                if not os.path.exists(path):
+                    CTkMessagebox(
+                        title="Error", message="File not found", icon="cancel"
+                    )
+                    return
+                path = os.path.relpath(path)
+            paths.extend(preleim_paths)
+    if len(paths) > num:
+        CTkMessagebox(title="Error", message="Too many files selected", icon="cancel")
+        return
+
+    self.badges = []
+    for path in paths:
+        self.badges.append(Badge(path))
+
+
+setattr(Badge, "select_image", select_image)
+setattr(LeatherBand, "select_image", select_image)
+setattr(BadgeRow, "select_images", select_images)
+
+
+def ask_save_to_file(self, title: str, initialdir: str) -> Optional[str]:
+    # saves a LeatherBand to a file
+    path = asksaveasfilename(
+        title=title, initialdir=initialdir, filetypes=[("JSON files", "*.json")]
+    )
+    if path is None or path == "" or path == ():
+        return
+    path = pathlib.Path(path).with_suffix(".json")
+    path = os.path.relpath(path)
+    try:
+        self.save_to_file(path)
+    except Exception as e:
+        CTkMessagebox(title="Error", message=str(e), icon="cancel")
+    return path
+
+
+@classmethod
+def ask_load_from_file(
+    cls, title: str, initialdir: str
+) -> Optional[tuple[LeatherBand, str]]:
+    # loads a LeatherBand from a file
+    path = askopenfilename(
+        title=title, initialdir=initialdir, filetypes=[("JSON files", "*.json")]
+    )
+    if path is None or path == "" or path == ():
+        return
+    path = os.path.relpath(path)
+    try:
+        return cls.load_from_file(path), path
+    except Exception as e:
+        CTkMessagebox(title="Error", message=str(e), icon="cancel")
+
+
+setattr(LeatherBand, "ask_load_from_file", ask_load_from_file)
+setattr(LeatherBand, "ask_save_to_file", ask_save_to_file)
+
+
 class BadgeListElement:
     def __init__(
         self,
@@ -198,14 +291,7 @@ class BadgeFrame(ctk.CTkFrame, BadgeListElement):
             self.btn_del.grid(row=0, column=4, padx=(0, 5))
 
     def _change(self):
-        path = askopenfilename(
-            title="Select Badge",
-            filetypes=[("PNG Files", "*.png")],
-            initialdir=DEFAULT_BADGE_PATH,
-        )
-        if path is None or not os.path.exists(path):
-            return
-        self.badge.image_path = path
+        self.badge.select_image(title="Select Badge", initialdir=DEFAULT_BADGE_PATH)
         super()._change()
 
 
@@ -347,7 +433,6 @@ class App(ctk.CTk):
         self.slider_margin = ctk.CTkSlider(
             self.margin_frame, from_=0, to=50, command=self.on_margin_change
         )
-        self.slider_margin.set(10)
         self.slider_margin.grid(
             row=1,
             column=0,
@@ -522,61 +607,29 @@ class App(ctk.CTk):
         self.refresh_badges_list()
 
     def load_preset(self):
-        path = askopenfilename(
-            filetypes=[("JSON Files", "*.json")],
-            initialdir=DEFAULT_PRESET_PATH,
-            title="Load Preset",
+        band, path = LeatherBand.ask_load_from_file(  # pyright: ignore[reportAttributeAccessIssue]
+            title="Load Preset", initialdir=DEFAULT_PRESET_PATH
         )
-        if path is None or path == "" or path == ():
+        if band is None or path is None:
             return
-        path = os.path.relpath(path)
         self.var_preset.set(path)
-        try:
-            self.band = LeatherBand.load_from_file(path)
-        except Exception as e:
-            CTkMessagebox(
-                title="Error", message=f"Failed to load preset: {e}", icon="cancel"
-            )
+        self.band = band
         self.refresh_ui()
 
     def new_preset(self):
-        path = asksaveasfilename(
-            filetypes=[("json", "*.json")],
-            initialdir=DEFAULT_PRESET_PATH,
-            title="Save Preset",
+        path = self.band.ask_save_to_file(  # pyright: ignore[reportAttributeAccessIssue]
+            title="Save Preset", initialdir=DEFAULT_PRESET_PATH
         )
-        if path is None or path == "" or path == ():
+        if path is None:
             return
-        path = pathlib.Path(path)
-        if path.suffix == "":
-            path = path.with_suffix(".json")
-        path = os.path.relpath(path)
         self.var_preset.set(path)
-        self.band = LeatherBand()
-        try:
-            self.band.save_to_file(path)
-        except Exception as e:
-            CTkMessagebox(
-                title="Error", message=f"Failed to save preset: {e}", icon="cancel"
-            )
         self.refresh_ui()
 
     def select_background(self):
-        path = askopenfilename(
+        self.band.select_image(  # pyright: ignore[reportAttributeAccessIssue]
             title="Select Background",
-            filetypes=[("PNG Files", "*.png")],
             initialdir=DEFAULT_BACKGROUND_PATH,
         )
-        if path is None or path == "" or path == ():
-            return
-        path = os.path.relpath(path)
-        if not os.path.exists(path):
-            CTkMessagebox(
-                title="Error", message=f"File not found: {path}", icon="cancel"
-            )
-            return
-        self.band.image_path = path
-        self.var_bg_path.set(path)
         self.refresh_preview()
         self.refresh_elements()
 
@@ -587,45 +640,24 @@ class App(ctk.CTk):
         self.refresh_elements()
 
     def add_badge(self):
-        path = askopenfilename(
-            title="Select Badge",
-            filetypes=[("PNG Files", "*.png")],
+        badge = Badge()
+        badge.select_image(  # pyright: ignore[reportAttributeAccessIssue]
+            title="Select Image",
             initialdir=DEFAULT_BADGE_PATH,
         )
-        if path is None or path == "" or path == ():
-            return
-        path = os.path.relpath(path)
-        self.band.badges.append(Badge(path))
+        self.band.badges.append(badge)
         self.refresh_badges_list()
         self.refresh_preview()
 
     def add_badge_row(self):
-        paths = []
-        path1 = askopenfilenames(
-            title="Select Two Badges",
-            filetypes=[("PNG Files", "*.png")],
+        badge_row = BadgeRow()
+        badge_row.select_images(  # pyright: ignore[reportAttributeAccessIssue]
+            title="Select Images",
             initialdir=DEFAULT_BADGE_PATH,
+            num=2,
         )
-        if path1 is None or path1 == "" or path1 == () or len(path1) == 0:
-            return
-        if len(path1) > 2:
-            CTkMessagebox(
-                title="Error", message="You can only select up to two badges."
-            )
-            return
-        elif len(path1) == 1:
-            paths.append(path1[0])
-            path2 = askopenfilename(
-                title="Select Badge",
-                filetypes=[("PNG Files", "*.png")],
-                initialdir=DEFAULT_BADGE_PATH,
-            )
-            if path2 is None or path2 == "" or path2 == ():
-                return
-            paths.append(path2)
-        elif len(path1) == 2:
-            paths.extend(path1)
-        self.band.badges.append(BadgeRow.from_paths(*paths))
+        self.band.badges.append(badge_row)
+
         self.refresh_badges_list()
         self.refresh_preview()
 

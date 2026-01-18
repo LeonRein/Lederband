@@ -13,6 +13,8 @@ from PIL import Image
 class Badge:
     """Class representing a single badge."""
 
+    image_path: str = ""
+
     @property
     def name(self):
         path = pathlib.Path(self.image_path)
@@ -23,24 +25,17 @@ class Badge:
             raise FileNotFoundError(f"Badge image not found: {self.image_path}")
         return Image.open(os.path.abspath(self.image_path)).convert("RGBA")
 
-    image_path: str = ""
-
 
 @dataclass_json
 @dataclass
 class BadgeRow:
     """Class representing a row of badges."""
 
-    badges: List[Badge]
+    badges: List[Badge] = dataclasses.field(default_factory=list)
 
     @property
     def name(self):
         return ", ".join(badge.name for badge in self.badges)
-
-    @classmethod
-    def from_paths(cls, *args):
-        badges = [Badge(arg) for arg in args]
-        return cls(badges)
 
 
 def union_decoder(data):
