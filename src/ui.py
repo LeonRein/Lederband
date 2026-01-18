@@ -1,5 +1,6 @@
 import os
 import pathlib
+from datetime import datetime
 from tkinter.filedialog import askopenfilename, askopenfilenames, asksaveasfilename
 from typing import Callable, Optional
 
@@ -23,7 +24,7 @@ def select_image(self, title: str, initialdir: str):
     if path is None or path == "" or path == ():
         return
     if not os.path.exists(path):
-        CTkMessagebox(title="Error", message="File not found", icon="cancel")
+        CTkMessagebox(app, title="Error", message="File not found", icon="cancel")
         return
     path = os.path.relpath(path)
     self.image_path = path
@@ -40,7 +41,9 @@ def select_images(self, title: str, initialdir: str, num: int):
             if path is None or path == "" or path == ():
                 return
             if not os.path.exists(path):
-                CTkMessagebox(title="Error", message="File not found", icon="cancel")
+                CTkMessagebox(
+                    app, title="Error", message="File not found", icon="cancel"
+                )
                 return
             path = os.path.relpath(path)
             paths.append(path)
@@ -53,13 +56,15 @@ def select_images(self, title: str, initialdir: str, num: int):
                     return
                 if not os.path.exists(path):
                     CTkMessagebox(
-                        title="Error", message="File not found", icon="cancel"
+                        app, title="Error", message="File not found", icon="cancel"
                     )
                     return
                 path = os.path.relpath(path)
             paths.extend(preleim_paths)
     if len(paths) > num:
-        CTkMessagebox(title="Error", message="Too many files selected", icon="cancel")
+        CTkMessagebox(
+            app, title="Error", message="Too many files selected", icon="cancel"
+        )
         return
 
     self.badges = []
@@ -84,25 +89,26 @@ def ask_save_to_file(self, title: str, initialdir: str) -> Optional[str]:
     try:
         self.save_to_file(path)
     except Exception as e:
-        CTkMessagebox(title="Error", message=str(e), icon="cancel")
+        CTkMessagebox(app, title="Error", message=str(e), icon="cancel")
     return path
 
 
 @classmethod
 def ask_load_from_file(
     cls, title: str, initialdir: str
-) -> Optional[tuple[LeatherBand, str]]:
+) -> tuple[Optional[LeatherBand], Optional[str]]:
     # loads a LeatherBand from a file
     path = askopenfilename(
         title=title, initialdir=initialdir, filetypes=[("JSON files", "*.json")]
     )
     if path is None or path == "" or path == ():
-        return
+        return None, None
     path = os.path.relpath(path)
     try:
         return cls.load_from_file(path), path
     except Exception as e:
-        CTkMessagebox(title="Error", message=str(e), icon="cancel")
+        CTkMessagebox(app, title="Error", message=str(e), icon="cancel")
+        return None, None
 
 
 setattr(LeatherBand, "ask_load_from_file", ask_load_from_file)
@@ -299,11 +305,9 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.engine = Engine()
-
         self.band = LeatherBand()
-        self.engine.band = self.band
         self.preview_image: Optional[Image] = None
+        self.engine = Engine(self.band)
 
         self.title("LeatherBand")
         self.geometry("600x800")
@@ -579,7 +583,7 @@ class App(ctk.CTk):
         except FileNotFoundError as e:
             self.preview_image = None
             self.lbl_preview.configure(image=None, text="No Preview")
-            CTkMessagebox(title="Error", message=str(e), icon="cancel")
+            CTkMessagebox(app, title="Error", message=str(e), icon="cancel")
             return
         if self.preview_image is None:
             self.lbl_preview.configure(image="", text="No Preview")
@@ -616,9 +620,12 @@ class App(ctk.CTk):
         if band is None or path is None:
             return
         self.var_preset.set(path)
-        self.engine.set_name(pathlib.Path(path).stem)
         self.band = band
-        self.engine.band = band
+        try:
+            self.engine.set_band(band)
+        except FileNotFoundError as e:
+            CTkMessagebox(title="error", message=f"{e}", icon="cancel")
+        self.engine.set_name(pathlib.Path(path).stem)
         self.refresh_ui()
 
     def new_preset(self):
@@ -636,6 +643,10 @@ class App(ctk.CTk):
             title="Select Background",
             initialdir=DEFAULT_BACKGROUND_PATH,
         )
+        try:
+            self.engine.update_background()
+        except FileNotFoundError as e:
+            CTkMessagebox(title="error", message=f"{e}", icon="cancel")
         self.refresh_preview()
         self.refresh_elements()
 
@@ -697,28 +708,40 @@ class App(ctk.CTk):
         self.refresh_badges_list()
 
     def export_image(self):
+        date = datetime.now().strftime("%Y-%m-%d")
+        file_name = f"{date}"
         if self.preview_image is None:
-            CTkMessagebox(title="Export Error", message="No image to export")
+            CTkMessagebox(app, title="Export Error", message="No image to export")
             return
         if os.path.exists(self.var_preset.get()):
             try:
                 self.band.save_to_file(self.var_preset.get())
                 preset_name = pathlib.Path(self.var_preset.get()).stem
+                file_name = f"{date} {preset_name}.png"
             except Exception as e:
                 CTkMessagebox(
-                    title="Export Error", message=f"Failed to save preset: {e}"
+                    app, title="Export Error", message=f"Failed to save preset: {e}"
                 )
                 return
         else:
-            CTkMessagebox(title="Export Error", message="Preset file not found")
+            CTkMessagebox(app, title="Export Error", message="Preset file not found")
             preset_name = "default"
 
-        path = os.path.join(DEFAULT_EXPORT_PATH, preset_name + ".png")
+        path = os.path.join(DEFAULT_EXPORT_PATH, file_name)
         try:
             self.preview_image.save(path, format="PNG")
         except Exception as e:
-            CTkMessagebox(title="Export Error", message=f"Failed to export image: {e}")
+            CTkMessagebox(
+                app, title="Export Error", message=f"Failed to export image: {e}"
+            )
             return
 
-        CTkMessagebox(title="Export", message=f"Image exported to {path}")
+        CTkMessagebox(
+            app,
+            title="Export",
+            message=f'Image exported to "{path}".\nPreset saved to "{preset_name}"',
+        )
         pass
+
+
+app = App()

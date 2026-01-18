@@ -3,19 +3,19 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from .models import Badge, BadgeRow, LeatherBand
 
 
 class Engine:
-    def __init__(self):
-        self.name: str = ""
-        self.name_image: Optional[Image.Image] = None
-        self.name_image_bbox: Optional[tuple[int, int, int, int]] = None
-        self.background_path: str = ""
-        self.background_image: Optional[Image.Image] = None
-        self.band: Optional[LeatherBand] = None
+    def __init__(self, band: LeatherBand):
+        self.__name: str = ""
+        self.__name_image: Optional[Image.Image] = None
+        self.__name_image_bbox: Optional[tuple[int, int, int, int]] = None
+        self.__name_image_mask: Image.Image = Image.new("L", (1, 1), 0)
+        self.__background_image: Optional[Image.Image] = None
+        self.__band: LeatherBand = band
 
         # font_path = os.path.join(os.path.dirname(__file__), "font", "PixelOperator.ttf")
         # font_path = os.path.join(os.path.dirname(__file__), "font", "W95FA.otf")
@@ -23,16 +23,28 @@ class Engine:
         self.font_size = 8
         self.font = ImageFont.truetype(font_path, self.font_size)
 
-    def set_name(self, name: str):
-        self.name = name
-        self.generate_name_image()
+    def set_band(self, band: LeatherBand):
+        self.__band = band
+        self.update_background()
 
-    def get_largest_white_bbox(self):
-        if self.background_image is None:
-            self.name_image_bbox = None
+    def set_name(self, name: str):
+        if self.__name != name:
+            self.__name = name
+            self.__generate_name_image()
+
+    def update_background(
+        self,
+    ):
+        self.__background_image = self.__band.get_image()
+        self.__generate_name_image_mask()
+        self.__generate_name_image()
+
+    def __generate_name_image_mask(self):
+        if self.__background_image is None:
+            self.__name_image_bbox = None
             return None
 
-        gray_img = self.background_image.convert("L")
+        gray_img = self.__background_image.convert("L")
         img_array = np.array(gray_img)
 
         # 2. Threshold to ensure we only have pure white (255) vs the rest
@@ -59,18 +71,26 @@ class Engine:
         y = stats[largest_label, cv2.CC_STAT_TOP]
         w = stats[largest_label, cv2.CC_STAT_WIDTH]
         h = stats[largest_label, cv2.CC_STAT_HEIGHT]
+        self.__name_image_bbox = (x, y, w + x, h + y)
 
-        self.name_image_bbox = (x, y, w + x, h + y)
+        bg_crop = self.__background_image.crop(self.__name_image_bbox)
+        self.__name_image_mask = bg_crop.convert("L").point(
+            lambda p: 255 if p > 254 else 0  # pyright: ignore[reportOperatorIssue]
+        )
 
-    def generate_name_image(self):
-        self.get_largest_white_bbox()
-        if self.name_image_bbox is None or self.name == "":
-            self.name_image = None
+    def __generate_name_image(self):
+        if (
+            self.__name_image_bbox is None
+            or self.__background_image is None
+            or self.__name_image_mask is None
+            or self.__name == ""
+        ):
+            self.__name_image = None
             return
 
         w, h = (
-            self.name_image_bbox[2] - self.name_image_bbox[0],
-            self.name_image_bbox[3] - self.name_image_bbox[1],
+            self.__name_image_bbox[2] - self.__name_image_bbox[0],
+            self.__name_image_bbox[3] - self.__name_image_bbox[1],
         )
 
         rotate = False
@@ -83,18 +103,24 @@ class Engine:
         draw.fontmode = "1"
 
         # Draw the name text on the name image
-        # bbox = draw.textbbox((20, 20), self.name, font=self.font)
-        # text_height = bbox[3] - bbox[1]
+        bbox = draw.textbbox((20, 20), self.__name, font=self.font)
+        text_width = bbox[2] - bbox[0]
         text_y = (h - self.font_size) // 2
-        draw.text((1, text_y), self.name, font=self.font, fill=(0, 0, 0, 255))
+        text_x = max((w - text_width) // 2, 1)
+        draw.text((text_x, text_y), self.__name, font=self.font, fill=(0, 0, 0, 255))
 
         # Rotate the name image if necessary
         if rotate:
             name_image = name_image.rotate(90, expand=True)
 
-        self.name_image = name_image
+        # Ensure mask is the same size as name_image (should be guaranteed by logic, but good for safety)
+        a = name_image.split()[3]
+        new_a = ImageChops.multiply(a, self.__name_image_mask)
+        name_image.putalpha(new_a)
 
-    def create_badge_row_image(self, badge_row: BadgeRow):
+        self.__name_image = name_image
+
+    def __create_badge_row_image(self, badge_row: BadgeRow):
         images = []
         width = 0
         max_height = 0
@@ -123,67 +149,55 @@ class Engine:
         return new_image
 
     def create_band_image(self) -> Optional[Image.Image]:
-        if self.band is None:
+        if self.__band is None or self.__background_image is None:
             return None
 
-        if self.background_path != self.band.image_path:
-            self.background_path = self.band.image_path
-            self.background_image = self.band.get_image()
-            self.generate_name_image()
+        background = self.__background_image.copy()
 
-        if self.background_image is None:
-            return None
-
-        background = self.background_image.copy()
-
-        if self.name_image is not None and self.name_image_bbox is not None:
+        if self.__name_image is not None and self.__name_image_bbox is not None:
             background.alpha_composite(
-                self.name_image, (self.name_image_bbox[0], self.name_image_bbox[1])
+                self.__name_image,
+                (self.__name_image_bbox[0], self.__name_image_bbox[1]),
             )
 
         bg_width, bg_height = background.size
 
         current_y = bg_height
 
-        for badge in self.band.badges:
+        for badge in self.__band.badges:
             image = None
             if isinstance(badge, Badge):
                 image = badge.get_image()
             elif isinstance(badge, BadgeRow):
-                image = self.create_badge_row_image(badge)
+                image = self.__create_badge_row_image(badge)
 
             if image is None:
                 continue
 
-            try:
-                b_width, b_height = image.size
+            b_width, b_height = image.size
 
-                # scale the image to fit the background width
-                scale = bg_width / b_width
-                image = image.resize(
-                    (int(b_width * scale), int(b_height * scale)),
-                    resample=Image.Resampling.LANCZOS,
-                )
+            # scale the image to fit the background width
+            scale = bg_width / b_width
+            image = image.resize(
+                (int(b_width * scale), int(b_height * scale)),
+                resample=Image.Resampling.LANCZOS,
+            )
 
-                b_width, b_height = image.size
+            b_width, b_height = image.size
 
-                # center horizontally
-                x_pos = (bg_width - b_width) // 2
+            # center horizontally
+            x_pos = (bg_width - b_width) // 2
 
-                # place directly above the previous item (or bottom edge)
-                # The bottom of the badge should be at current_y
-                # So top of the badge is current_y - b_height
-                top_y = current_y - b_height
+            # place directly above the previous item (or bottom edge)
+            # The bottom of the badge should be at current_y
+            # So top of the badge is current_y - b_height
+            top_y = current_y - b_height
 
-                # Composite the badge
-                # We use the badge itself as the mask for transparency
-                background.alpha_composite(image, (x_pos, top_y))
+            # Composite the badge
+            # We use the badge itself as the mask for transparency
+            background.alpha_composite(image, (x_pos, top_y))
 
-                # Update current_y for the next badge, applying margin
-                current_y = top_y - self.band.margin
-
-            except Exception as e:
-                print(f"Error processing badge {badge.name}: {e}")
-                continue
+            # Update current_y for the next badge, applying margin
+            current_y = top_y - self.__band.margin
 
         return background

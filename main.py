@@ -1,8 +1,7 @@
-from src.ui import App
+from src.ui import app
 
 
 def main():
-    app = App()
     app.mainloop()
 
 
