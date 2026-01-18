@@ -7,7 +7,7 @@ import customtkinter as ctk
 from CTkMessagebox import CTkMessagebox
 from PIL.Image import Image
 
-from src.engine import create_band_image
+from src.engine import Engine
 from src.models import Badge, BadgeRow, LeatherBand
 
 DEFAULT_PRESET_PATH = os.path.join(os.getcwd(), "presets/")
@@ -299,7 +299,10 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        self.engine = Engine()
+
         self.band = LeatherBand()
+        self.engine.band = self.band
         self.preview_image: Optional[Image] = None
 
         self.title("LeatherBand")
@@ -572,7 +575,7 @@ class App(ctk.CTk):
             self.lbl_preview.configure(image="", text="No Background image selected")
             return
         try:
-            self.preview_image = create_band_image(self.band)
+            self.preview_image = self.engine.create_band_image()
         except FileNotFoundError as e:
             self.preview_image = None
             self.lbl_preview.configure(image=None, text="No Preview")
@@ -613,7 +616,9 @@ class App(ctk.CTk):
         if band is None or path is None:
             return
         self.var_preset.set(path)
+        self.engine.set_name(pathlib.Path(path).stem)
         self.band = band
+        self.engine.band = band
         self.refresh_ui()
 
     def new_preset(self):
@@ -622,6 +627,7 @@ class App(ctk.CTk):
         )
         if path is None:
             return
+        self.engine.set_name(pathlib.Path(path).stem)
         self.var_preset.set(path)
         self.refresh_ui()
 

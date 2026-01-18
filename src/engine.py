@@ -1,87 +1,189 @@
+import os
 from typing import Optional
 
-from PIL import Image
+import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from .models import Badge, BadgeRow, LeatherBand
 
 
-def create_badge_row_image(badge_row: BadgeRow):
-    images = []
-    width = 0
-    max_height = 0
+class Engine:
+    def __init__(self):
+        self.name: str = ""
+        self.name_image: Optional[Image.Image] = None
+        self.name_image_bbox: Optional[tuple[int, int, int, int]] = None
+        self.background_path: str = ""
+        self.background_image: Optional[Image.Image] = None
+        self.band: Optional[LeatherBand] = None
 
-    for index, badge in enumerate(badge_row.badges):
-        image = badge.get_image()
-        if image is None:
-            print(f"Warning: Badge image not found: {badge.image_path}")
-            continue
-        if index == 0:
-            image = image.crop((0, 0, image.width - 1, image.height))
-        elif index == len(badge_row.badges) - 1:
-            image = image.crop((1, 0, image.width, image.height))
-        else:
-            image = image.crop((1, 0, image.width - 1, image.height))
-        images.append(image)
-        width += image.width
-        max_height = max(max_height, image.height)
+        # font_path = os.path.join(os.path.dirname(__file__), "font", "PixelOperator.ttf")
+        # font_path = os.path.join(os.path.dirname(__file__), "font", "W95FA.otf")
+        font_path = os.path.join(os.path.dirname(__file__), "font", "PIXEARG_.TTF")
+        self.font_size = 8
+        self.font = ImageFont.truetype(font_path, self.font_size)
 
-    new_image = Image.new("RGBA", (width, max_height), color=(255, 255, 255, 0))
-    x = 0
-    for image in images:
-        new_image.paste(image, (x, 0))
-        x += image.width
+    def set_name(self, name: str):
+        self.name = name
+        self.generate_name_image()
 
-    return new_image
+    def get_largest_white_bbox(self):
+        if self.background_image is None:
+            self.name_image_bbox = None
+            return None
 
+        gray_img = self.background_image.convert("L")
+        img_array = np.array(gray_img)
 
-def create_band_image(band: LeatherBand) -> Optional[Image.Image]:
-    background = band.get_image()
-    if background is None:
-        return None
+        # 2. Threshold to ensure we only have pure white (255) vs the rest
+        # If your "white" isn't perfect, you can adjust the threshold value
+        _, binary = cv2.threshold(img_array, 254, 255, cv2.THRESH_BINARY)
 
-    bg_width, bg_height = background.size
+        # 3. Find connected components
+        # connectivity=8 includes diagonals; connectivity=4 does not
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            binary, connectivity=8
+        )
 
-    current_y = bg_height
+        # If only background is found (num_labels = 1), return None
+        if num_labels < 2:
+            return None
 
-    for badge in band.badges:
-        image = None
-        if isinstance(badge, Badge):
+        # 4. Filter out the background label (always index 0) and find the largest area
+        # stats[label, cv2.CC_STAT_AREA] gives the pixel count
+        largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+
+        # 5. Extract bounding box coordinates for the largest label
+        # stats contains [left, top, width, height, area]
+        x = stats[largest_label, cv2.CC_STAT_LEFT]
+        y = stats[largest_label, cv2.CC_STAT_TOP]
+        w = stats[largest_label, cv2.CC_STAT_WIDTH]
+        h = stats[largest_label, cv2.CC_STAT_HEIGHT]
+
+        self.name_image_bbox = (x, y, w + x, h + y)
+
+    def generate_name_image(self):
+        self.get_largest_white_bbox()
+        if self.name_image_bbox is None or self.name == "":
+            self.name_image = None
+            return
+
+        w, h = (
+            self.name_image_bbox[2] - self.name_image_bbox[0],
+            self.name_image_bbox[3] - self.name_image_bbox[1],
+        )
+
+        rotate = False
+        if h > w:
+            rotate = True
+            w, h = h, w
+
+        name_image = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+        draw = ImageDraw.Draw(name_image)
+        draw.fontmode = "1"
+
+        # Draw the name text on the name image
+        # bbox = draw.textbbox((20, 20), self.name, font=self.font)
+        # text_height = bbox[3] - bbox[1]
+        text_y = (h - self.font_size) // 2
+        draw.text((1, text_y), self.name, font=self.font, fill=(0, 0, 0, 255))
+
+        # Rotate the name image if necessary
+        if rotate:
+            name_image = name_image.rotate(90, expand=True)
+
+        self.name_image = name_image
+
+    def create_badge_row_image(self, badge_row: BadgeRow):
+        images = []
+        width = 0
+        max_height = 0
+
+        for index, badge in enumerate(badge_row.badges):
             image = badge.get_image()
-        elif isinstance(badge, BadgeRow):
-            image = create_badge_row_image(badge)
+            if image is None:
+                print(f"Warning: Badge image not found: {badge.image_path}")
+                continue
+            if index == 0:
+                image = image.crop((0, 0, image.width - 1, image.height))
+            elif index == len(badge_row.badges) - 1:
+                image = image.crop((1, 0, image.width, image.height))
+            else:
+                image = image.crop((1, 0, image.width - 1, image.height))
+            images.append(image)
+            width += image.width
+            max_height = max(max_height, image.height)
 
-        if image is None:
-            continue
+        new_image = Image.new("RGBA", (width, max_height), color=(255, 255, 255, 0))
+        x = 0
+        for image in images:
+            new_image.paste(image, (x, 0))
+            x += image.width
 
-        try:
-            b_width, b_height = image.size
+        return new_image
 
-            # scale the image to fit the background width
-            scale = bg_width / b_width
-            image = image.resize(
-                (int(b_width * scale), int(b_height * scale)),
-                resample=Image.Resampling.LANCZOS,
+    def create_band_image(self) -> Optional[Image.Image]:
+        if self.band is None:
+            return None
+
+        if self.background_path != self.band.image_path:
+            self.background_path = self.band.image_path
+            self.background_image = self.band.get_image()
+            self.generate_name_image()
+
+        if self.background_image is None:
+            return None
+
+        background = self.background_image.copy()
+
+        if self.name_image is not None and self.name_image_bbox is not None:
+            background.alpha_composite(
+                self.name_image, (self.name_image_bbox[0], self.name_image_bbox[1])
             )
 
-            b_width, b_height = image.size
+        bg_width, bg_height = background.size
 
-            # center horizontally
-            x_pos = (bg_width - b_width) // 2
+        current_y = bg_height
 
-            # place directly above the previous item (or bottom edge)
-            # The bottom of the badge should be at current_y
-            # So top of the badge is current_y - b_height
-            top_y = current_y - b_height
+        for badge in self.band.badges:
+            image = None
+            if isinstance(badge, Badge):
+                image = badge.get_image()
+            elif isinstance(badge, BadgeRow):
+                image = self.create_badge_row_image(badge)
 
-            # Composite the badge
-            # We use the badge itself as the mask for transparency
-            background.alpha_composite(image, (x_pos, top_y))
+            if image is None:
+                continue
 
-            # Update current_y for the next badge, applying margin
-            current_y = top_y - band.margin
+            try:
+                b_width, b_height = image.size
 
-        except Exception as e:
-            print(f"Error processing badge {badge.name}: {e}")
-            continue
+                # scale the image to fit the background width
+                scale = bg_width / b_width
+                image = image.resize(
+                    (int(b_width * scale), int(b_height * scale)),
+                    resample=Image.Resampling.LANCZOS,
+                )
 
-    return background
+                b_width, b_height = image.size
+
+                # center horizontally
+                x_pos = (bg_width - b_width) // 2
+
+                # place directly above the previous item (or bottom edge)
+                # The bottom of the badge should be at current_y
+                # So top of the badge is current_y - b_height
+                top_y = current_y - b_height
+
+                # Composite the badge
+                # We use the badge itself as the mask for transparency
+                background.alpha_composite(image, (x_pos, top_y))
+
+                # Update current_y for the next badge, applying margin
+                current_y = top_y - self.band.margin
+
+            except Exception as e:
+                print(f"Error processing badge {badge.name}: {e}")
+                continue
+
+        return background
